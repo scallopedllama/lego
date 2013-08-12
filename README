@@ -1,0 +1,61 @@
+lego -- build system management with schroot
+Joe Balough 2012
+
+lego is a utility for managing btrfs-snapshot chroots using the schroot tool.
+To use lego, create a new Logical Volume, format it btrfs, and mount it under /builds.
+Under /builds, create two subdirectories, /builds/bases and /builds/chroots.
+Create a new btrfs subvolume under /builds/bases and set up that directory as a build chroot:
+  Use debbootstrap to install a base operating system
+  Copy some default .basrhrc, etc. files to etc/skel in the base-chroot
+  Copy the sources list from the main system into the base-chroot for more repositories
+  Chroot into the base-chroot and install at least the following software:
+	build-essential subversion git vim diffstat texi2html texinfo cvs gawk chrpath wget screen \
+	python python-apport python-apt python-apt-common python-argparse python-central python-crypto \
+	python-gnupginterface python-httplib2 python-keyring python-launchpadlib python-lazr.restfulclient \
+	python-lazr.uri python-minimal python-oauth python-pkg-resources python-ply python-problem-report \
+	python-progressbar python-simplejson python-software-properties python-support python-wadllib \
+	python-wsgi-intercept python-zope.interface sqlite3 autoconf libtool
+  Change the /bin/sh symlink so that it points to /bin/bash
+  Set up openembedded under /opt
+Add the base-chroot to the schroot configuration file at /etc/schroot/schroot.conf
+	[beableboard]
+	type=btrfs-snapshot
+	description=BeagleBoard System Build
+	users=builder
+	root-users=builder
+	source-root-users=root
+	btrfs-source-subvolume=/builds/bases/bb-base
+	btrfs-snapshot-directory=/builds/chroots
+Comment out home mount in /etc/schroot/default/fstab, otherwise the base server home directory is mounted there.
+Add tmpfs mount point for /dev/shm (Required for python multithreading support):
+  /etc/schroot/default/fstab add to end of list:
+  tmpfs           /dev/shm        tmpfs   defaults,noexec,nosuid  0       0
+  and remove /builds/bases/bb-base/dev/shm
+  then # mkdir /builds/bases/bb-base/dev/shm
+Create a script to ensure the user has a home directory inside the new chroot
+  /etc/schroot/setup.d/60home
+	set -e
+
+	. "$SETUP_DATA_DIR/common-data"
+	. "$SETUP_DATA_DIR/common-functions"
+	. "$SETUP_DATA_DIR/common-config"
+
+	# Plain chroots should not be able to use scripts, but check anyway to
+	# be safe.
+	if [ $CHROOT_TYPE = "plain" ]; then
+		fatal "plain chroots may not run setup scripts; use directory instead"
+	fi
+
+	# Set up home directory for user if it does not already exist
+	if [ ! -d "$CHROOT_MOUNT_LOCATION/$AUTH_HOME" ]; then
+		HOMEDIR=$(/usr/bin/dirname "$CHROOT_MOUNT_LOCATION/$AUTH_HOME")
+		if [ ! -d "$HOMEDIR" ]; then
+			mkdir -p "$HOMEDIR"
+		fi
+		cp -rf "$CHROOT_MOUNT_LOCATION/etc/skel" "$HOMEDIR/$AUTH_USER"
+		chown -R $AUTH_USER:$AUTH_USER "$HOMEDIR/$AUTH_USER"
+		chown -R $AUTH_USER:$AUTH_USER "$CHROOT_MOUNT_LOCATION/opt/oebuild/sources"
+	fi
+
+Base system should now be set up.
+Run lego --help for usage information.

@@ -1,0 +1,421 @@
+#!/bin/bash
+
+# Build list of available chroots
+SCRIPT_NAME=$(basename $0)
+AVAIL_BASE=$(grep '^\[\(.*\)\]' /etc/schroot/schroot.conf 2> /dev/null | tr -d '[]')
+AVAIL_PROMOTED_WORKING=$(head -qn 1 /etc/schroot/chroot.d/* 2> /dev/null | tr -d '[]')
+AVAIL_TEMPLATE="$AVAIL_BASE $AVAIL_PROMOTED_WORKING"
+AVAIL_WORKING=$(ls /builds/chroots 2> /dev/null)
+ALL_AVAIL="$AVAIL_BASE $AVAIL_WORKING"
+
+# Sets the print color.
+function SetColor
+{
+	case $1 in
+	red)
+		tput setaf 1;;
+	green)
+		tput setaf 2;;
+	yellow)
+		tput setaf 3;;
+	blue)
+		tput setaf 4;;
+	purple)
+		tput setaf 5;;
+	cyan)
+		tput setaf 6;;
+	white)
+		tput setaf 7;;
+	bold)
+		tput bold;;
+	uline)
+		tput sgr 0 1;;
+	*)
+		tput sgr0;;
+	esac
+}
+
+# Usage: colorecho "color" "message that can be quite long"
+# Prints message in color
+function colorecho
+{
+	SetColor $1
+	echo $2
+	SetColor no
+}
+
+# Prints the command usage
+print_usage ()
+{
+	echo "Usage $SCRIPT_NAME [command] ..."
+	echo "$SCRIPT_NAME is a tool to simplify the creation and running of build environment chroots on the machine."
+	echo ""
+	echo "There are three types of chroots referred to in the commands below:"
+	echo "  base-chroot"
+	echo "        Can only be used as a base for a persistent or non-persistent snapshot chroot."
+	echo "        It is not possible to run these chroots are they are."
+	echo "        base-chroot configuration is stored in /etc/schroot/schroot.conf"
+	echo ""
+	echo "  work-chroot"
+	echo "        A snapshot of a base-chroot that can then be chrooted to. These chroots are possible to be run as they are."
+	echo "        work-chroots are of one of the following types:"
+	echo "             persistent        The chroot remains after you log out, able to be resumed using the run command."
+	echo "             non-persistent    The chroot is destroyed when you log out."
+	echo ""
+	echo " promoted work-chroot"
+	echo "        A work-chroot that has been promoted remains a work-chroot that can be run as it is, however"
+	echo "        it is also possible to use a promoted work-chroot as a template-chroot on which another work-chroot is based."
+	echo "        Promoted work-chroot configurations are stored in /etc/schroot/chroot.d/(full-name).conf"
+	echo ""
+	echo ""
+	echo "  [command] can be one of the following:"
+	echo ""
+	echo "    list"
+	echo "        Lists all defined base-chroots, promoted work-chroots, and non-promoted work-chroots available on the system."
+	echo ""
+	echo "    new (template-chroot) (local-name)"
+	echo "        Creates a new persistent work-chroot which is a snapshot of (template-chroot)."
+	echo "        A template-chroot is either a base-chroot or a promoted work-chroot."
+	echo "        The new work-chroot will use the following format to make its full name:"
+	echo "        (base-chroot-name)=(username)-(local-name)."
+	echo "        The automatic formatting will help prevent name collisions"
+	echo "        and allows for the history of that chroot to be visible at a glance."
+	echo "        Name collisions will result in an error."
+	echo ""
+	echo "    run (full-name)"
+	echo "        Runs the base- or work-chroot with the specified full name."
+	echo "        If (full-name) is a base-chroot, a non-persistent snapshot will be created and you will be immediately"
+	echo "        chroot'd into that temporary environment *WHICH WILL BE DESTROYED WHEN YOU LOG OUT.*"
+	echo "        If (full-name) is a promoted work-chroot, it will still chroot to that work-chroot that will remain persistant."
+	echo ""
+	echo "    end (full-name)"
+	echo "        Ends the work-chroot with specified full name."
+	echo "        * THIS WILL DESTROY THE SPECIFIED CHROOT ENVIRONMENT! *"
+	echo "        If the work-chroot is promoted, it will be automatically demoted before it is ended."
+	echo ""
+	echo "    promote (full-name)"
+	echo "        Promotes a work-chroot with specified (full-name) to a promoted work-chroot,"
+	echo "        allowing it to be used as a template chroot with the new command."
+	echo "        This command will create a configuration file in /etc/schroot/chroot.d and thus requires root privilages."
+	echo ""
+	echo "    demote (full-name)"
+	echo "        Demotes a promoted work-chroot to a normal work-chroot,"
+	echo "        making it no longer able to be used as a template-chroot with the new command."
+	echo "        This command will delete a configuration file from /etc/schroot/chroot.d and thus requires root privilages."
+}
+
+# Determines if $1 is in the array $2
+in_array()
+{
+	needle=$1
+	haystack=$2
+	for i in $haystack; do
+		if [ "$i" == "$needle" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Lists the available chroots in the system
+list_chroots ()
+{
+	if [ "$AVAIL_BASE" == "" ]; then
+		colorecho red "No base-chroots defined."
+		colorecho red "Set up base-chroot(s) in /etc/schroot/schroot.conf"
+		return 1
+	else
+		colorecho cyan "Defined base-chroots:"
+		for i in $AVAIL_BASE; do
+			echo -e "\t$i"
+		done
+	fi
+	echo ""
+	colorecho cyan "Defined work-chroots:"
+	if [ "$AVAIL_WORKING" == "" ]; then
+		echo -e "\tNo work-chroots have been created."
+		echo -e "\tCreate work-chroots using the new command."
+	else
+		for i in $AVAIL_WORKING; do
+			echo -e "\t$i"
+		done
+	fi
+	echo ""
+	colorecho cyan "Promoted work-chroots:"
+	if [ "$AVAIL_PROMOTED_WORKING" == "" ]; then
+		echo -e "\tNo promoted work-chroots have been created."
+		echo -e "\tPromote work-chroots using the promote command."
+	else
+		for i in $AVAIL_PROMOTED_WORKING; do
+			echo -e "\t$i"
+		done
+	fi
+	if [ "$AVAIL_TEMPLATE" != "" ]; then
+		echo ""
+		colorecho cyan "Defined template chroots (base-chroots and promote work-chroots):"
+		for i in $AVAIL_TEMPLATE; do
+			echo -e "\t$i"
+		done
+	fi
+}
+
+
+# Creates a new chroot based on $2 named $3
+new_chroot()
+{
+	template_chroot=$1
+	local_name=$2
+	
+	if [ "$template_chroot" == "" ] || [ "$local_name" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "Template chroot name or local name missing."
+		return 1
+	fi
+	
+	if ! in_array $template_chroot "$AVAIL_TEMPLATE"; then
+		colorecho red "Template chroot '$template_chroot' not found."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Input checks out, create the chroot
+	output=$(/usr/bin/schroot -c $template_chroot -b -n "$template_chroot=$USER-$local_name" 2>&1)
+	exitval=$?
+	
+	# Print a status message
+	if [ $exitval -ne 0 ]; then
+		colorecho red "Failed to create work-chroot. schroot output:"
+		echo "$output"
+		colorecho red "Make sure a work-chroot with that name does not already exist."
+		return $exitval
+	else
+		colorecho green "Successfully created work-chroot '$output'"
+		return 0
+	fi
+}
+
+run_chroot()
+{
+	output=$1
+	# Check input
+	if [ "$output" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "work-chroot name missing."
+		return 1
+	fi
+
+	if ! in_array $output "$ALL_AVAIL"; then
+		colorecho red "chroot '$output' not found."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Clear the screen
+	clear
+	
+	# Handle starting a new temporary work-chroot from a base-chroot. Add a long warning before the chroot to tell the user about the danger.
+	if in_array $output "$AVAIL_BASE"; then
+		colorecho red "WARNING: '$output' is a base-chroot. A temporary snapshot will be created and chroot'd to."
+		colorecho red "         THIS CHROOT ENVIRONMENT WILL BE DESTROYED AND LOST FOREVER WHEN YOU LOG OUT OF THE CHROOT."
+		colorecho red "         Use the new command to create a persistant work-chroot."
+		schroot -c $output
+		exitval=$?
+		colorecho yellow "NOTE: Temporary work-chroot environment permenantly deleted."
+		return $exitval
+	fi
+	# Must be good to switch to the persistent work-chroot
+	schroot -c $output -r
+}
+
+	
+end_chroot()
+{
+	output=$1
+	# Check input
+	if [ "$output" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "work-chroot name missing."
+		return 1
+	fi
+
+	if ! in_array $output "$AVAIL_WORKING"; then
+		colorecho red "work-chroot '$output' not found."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Confirm with user that they want to end the chroot. Print a message telling them what exactly this means.
+	colorecho yellow "WARNING: Ending a work-chroot will permenantly delete its environment."
+	colorecho yellow "         What work has been done in this chroot will be lost forever."
+	
+	# See if the work-chroot is promoted
+	promoted="N"
+	if in_array $output "$AVAIL_PROMOTED_WORKING"; then
+		colorecho yellow "WARNING: work-chroot '$output' is promoted."
+		colorecho yellow "         Ending this work-chroot will also make it impossible to create new chroots based on this work-chroot."
+		promoted="Y"
+	fi
+	echo ""
+	while [ "${input^^}" != "YES" ] && [ "${input^^}" != "NO" ]; do
+		if [ "$input" != "" ]; then
+			colorecho cyan "Must type yes or no"
+		fi
+		echo -n "Are you sure you want to continue (yes/no)? "
+		read input
+	done
+	if [ "${input^^}" != "YES" ]; then
+		colorecho red "Aborting."
+		return 1
+	fi
+
+	# If it was promoted, demote it first
+	if [ "$promoted" == "Y" ]; then
+		demote_chroot $output
+		if [ $? -ne 0 ]; then
+			return 1 
+		fi
+	fi
+			
+	# Delete chroot
+	schroot -c $output -e
+	colorecho green "Permenantly deleted chroot environment for '$output' work-chroot."
+	return $?
+}
+
+promote_chroot()
+{
+	output=$1
+	# Check input
+	if [ "$output" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "work-chroot name missing."
+		return 1
+	fi
+
+	if ! in_array $output "$AVAIL_WORKING"; then
+		colorecho red "work-chroot '$output' not found."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	if in_array $output "$AVAIL_PROMOTED_WORKING"; then
+		colorecho yellow "work-chroot '$output' already promoted."
+		colorecho yellow "Not doing anything..."
+		return 0
+	fi
+	
+	# Need to craft the new config file here
+	(cat <<EOF
+[$output]
+type=btrfs-snapshot
+description=System Build Snapshot of $output
+users=builder
+root-users=builder
+source-root-users=root
+btrfs-source-subvolume=/builds/chroots/$output
+btrfs-snapshot-directory=/builds/chroots
+EOF
+) > /etc/schroot/chroot.d/$output.conf
+	
+	if [ $? -ne 0 ]; then
+		colorecho red "Failed to promote work-chroot '$output'."
+		colorecho red "Make sure command is run as root."
+		return 1
+	else
+		colorecho green "Successfully promoted work-chroot '$output'"
+		return 0
+	fi
+}
+
+demote_chroot()
+{
+	output=$1
+	# Check input
+	if [ "$output" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "work-chroot name missing."
+		return 1
+	fi
+
+	# Make sure that chroot is actually promoted
+	if ! in_array $output "$AVAIL_PROMOTED_WORKING"; then
+		colorecho red "work-chroot '$output' not promoted."
+		colorecho red "Not doing anything..."
+		return 1
+	else
+		# try to remove its configuration file.
+		rm -f /etc/schroot/chroot.d/$output.conf
+				
+		# See if the remove failed. Probably a permission issue if it did.
+		if [ $? -ne 0 ]; then
+			colorecho red "Failed to demote work-chroot '$output'."
+			colorecho red "Make sure command is run as root."
+			return 1
+		else
+			colorecho green "Successfully demoted work-chroot '$output'"
+			return 0
+		fi
+	fi
+}
+
+
+
+
+# Main command switch block
+# Basic Usage: buildchroot [command]
+COMMAND=$1
+
+case $COMMAND in
+	ls)
+		list_chroots
+		exit 0;
+		;;
+	list)
+		list_chroots
+		exit 0; 
+		;;
+	add)
+		# Same as new
+		new_chroot $2 $3
+		exit $?
+		;;
+	new)
+		new_chroot $2 $3
+		exit $?
+		;;
+	run)
+		run_chroot $2
+		exit $?
+		;;
+	end)
+		end_chroot $2
+		exit $?
+		;;
+	promote)
+		promote_chroot $2
+		exit $?
+		;;
+	demote)
+		demote_chroot $2
+		exit $?
+		;;
+
+	--help)
+		print_usage
+		exit 0
+		;;
+	-h)
+		print_usage
+		exit 0
+		;;
+	*)
+		print_usage
+		exit 1
+		;;
+esac
+
