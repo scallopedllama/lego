@@ -129,42 +129,56 @@ in_array()
 # Lists the available chroots in the system
 list_chroots ()
 {
-	if [ "$AVAIL_BASE" == "" ]; then
-		colorecho red "No base-chroots defined."
-		colorecho red "Set up base-chroot(s) in /etc/schroot/schroot.conf"
-		return 1
-	else
-		colorecho cyan "Defined base-chroots:"
-		for i in $AVAIL_BASE; do
-			echo -e "\t$i"
-		done
-	fi
-	echo ""
-	colorecho cyan "Defined work-chroots:"
-	if [ "$AVAIL_WORKING" == "" ]; then
-		echo -e "\tNo work-chroots have been created."
-		echo -e "\tCreate work-chroots using the new command."
-	else
-		for i in $AVAIL_WORKING; do
-			echo -e "\t$i"
-		done
-	fi
-	echo ""
-	colorecho cyan "Promoted work-chroots:"
-	if [ "$AVAIL_PROMOTED_WORKING" == "" ]; then
-		echo -e "\tNo promoted work-chroots have been created."
-		echo -e "\tPromote work-chroots using the promote command."
-	else
-		for i in $AVAIL_PROMOTED_WORKING; do
-			echo -e "\t$i"
-		done
-	fi
-	if [ "$AVAIL_TEMPLATE" != "" ]; then
+	if [ "$1" == "" ]; then
+		if [ "$AVAIL_BASE" == "" ]; then
+			colorecho red "No base-chroots defined."
+			colorecho red "Set up base-chroot(s) in /etc/schroot/schroot.conf"
+			return 1
+		else
+			colorecho cyan "Defined base-chroots:"
+			for i in $AVAIL_BASE; do
+				echo -e "\t$i"
+			done
+		fi
 		echo ""
-		colorecho cyan "Defined template chroots (base-chroots and promote work-chroots):"
-		for i in $AVAIL_TEMPLATE; do
-			echo -e "\t$i"
-		done
+		colorecho cyan "Defined work-chroots:"
+		if [ "$AVAIL_WORKING" == "" ]; then
+			echo -e "\tNo work-chroots have been created."
+			echo -e "\tCreate work-chroots using the new command."
+		else
+			for i in $AVAIL_WORKING; do
+				echo -e "\t$i"
+			done
+		fi
+		echo ""
+		colorecho cyan "Promoted work-chroots:"
+		if [ "$AVAIL_PROMOTED_WORKING" == "" ]; then
+			echo -e "\tNo promoted work-chroots have been created."
+			echo -e "\tPromote work-chroots using the promote command."
+		else
+			for i in $AVAIL_PROMOTED_WORKING; do
+				echo -e "\t$i"
+			done
+		fi
+		if [ "$AVAIL_TEMPLATE" != "" ]; then
+			echo ""
+			colorecho cyan "Defined template chroots (base-chroots and promote work-chroots):"
+			for i in $AVAIL_TEMPLATE; do
+				echo -e "\t$i"
+			done
+		fi
+	else
+		case "$1" in
+			template)
+				echo $AVAIL_TEMPLATE
+				;;
+			working)
+				echo $AVAIL_WORKING
+				;;
+			all)
+				echo $AVAIL_TEMPLATE $AVAIL_WORKING
+				;;
+		esac
 	fi
 }
 
@@ -514,11 +528,11 @@ COMMAND=$1
 
 case $COMMAND in
 	ls)
-		list_chroots
+		list_chroots $2
 		exit 0;
 		;;
 	list)
-		list_chroots
+		list_chroots $2
 		exit 0; 
 		;;
 	add)
