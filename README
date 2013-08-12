@@ -59,3 +59,7 @@ Create a script to ensure the user has a home directory inside the new chroot
 
 Base system should now be set up.
 Run lego --help for usage information.
+
+Also included in this repository is a lego_completion script that will provide
+bash completion for lego. Copy this script into /etc/bash_completion.d to enable it.
+
