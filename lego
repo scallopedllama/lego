@@ -102,6 +102,15 @@ print_usage ()
 	echo "        Demotes a promoted work-chroot to a normal work-chroot,"
 	echo "        making it no longer able to be used as a template-chroot with the new command."
 	echo "        This command will delete a configuration file from /etc/schroot/chroot.d and thus requires root privilages."
+	echo ""
+	echo "    permit (full-name) (username)"
+	echo "        Adds (username) to the list of users allowed to create a chroot based on (full-name)."
+	echo "        The first time this command is run, the user is simply added to the schroot users list for that chroot."
+	echo "        The second time this command is run, the user is added to the root-users list, allowing that user to use sudo inside the chroot."
+	echo ""
+	echo "    prohibit (full-name) (username)"
+	echo "        Removes (username) from both the users and root-users list for the (full-name) chroot."
+	echo ""
 }
 
 # Determines if $1 is in the array $2
@@ -339,6 +348,7 @@ demote_chroot()
 		print_usage
 		echo ""
 		colorecho red "work-chroot name missing."
+		colorecho red "Not doing anythin..."
 		return 1
 	fi
 
@@ -363,6 +373,138 @@ demote_chroot()
 	fi
 }
 
+permit_chroot()
+{
+	full_name=$1
+	user_name=$2
+	# Check input
+	if [ "$full_name" == "" ] || [ "$user_name" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "base-chroot / promoted work-chroot name or username missing."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Make sure chroot exists
+	if ! in_array "$full_name" "$AVAIL_PROMOTED_WORKING" && ! in_array "$full_name" "$AVAIL_BASE"; then
+		colorecho red "chroot '$full_name' not a promoted work-chroot or a base-chroot."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Make sure user exists
+	if ! id "$user_name" > /dev/null 2>&1; then
+		colorecho red "user '$user_name' does not exist in system."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Input appears to be ok. Go ahead and add them to the list
+	# base-chroot
+	if in_array "$full_name" "$AVAIL_BASE"; then
+		# Make sure the user isn't already root
+		if sed -n ":a;N;\$!ba;s|.*\[$full_name\].*\nroot-users=\([^\n]*\).*|\1|p" /etc/schroot/schroot.conf | grep -E "^([^,]*,)*$user_name,?.*$" > /dev/null; then
+			colorecho yellow "User '$user_name' already has root permissions in chroot '$full_name'."
+			colorecho yellow "Not doing anything..."
+			return 0
+		fi
+		
+		# See if the user is already permitted. If so, add them to the root-users lists
+		add_to_list="users"
+		if sed -n ":a;N;\$!ba;s|.*\[$full_name\].*\nusers=\([^\n]*\).*|\1|p" /etc/schroot/schroot.conf | grep -E "^([^,]*,)*$user_name,?.*$" > /dev/null; then
+			add_to_list="root-users"
+		fi
+		
+		# Add to the list
+		sed -i ":a;N;\$!ba;s|\(\[$full_name\].*\n$add_to_list=[^\n]*\)|\1,$user_name|" /etc/schroot/schroot.conf
+		if [ $? -ne 0 ]; then
+			colorecho red "Failed to permit user '$user_name' to use base-chroot '$full_name'."
+			colorecho red "Make sure command is run as root."
+			return 1
+		else
+			colorecho green "Successfully permitted user '$user_name' to use base-chroot '$full_name'."
+			return 0
+		fi
+	# work-chroot
+	else
+		# Make sure they aren't already root there
+		if sed -n "s|^root-users=\(.*\)|\1|p" "/etc/schroot/chroot.d/$full_name.conf" | grep -E "^([^,]*,)*$user_name,?.*$" > /dev/null; then
+			colorecho yellow "User '$user_name' already has root permissions in chroot '$full_name'."
+			colorecho yellow "Not doing anything..."
+			return 0
+		fi
+		
+		# See if the user is already permitted. If so, add them to the root-users lists
+		add_to_list="users"
+		if sed -n "s|^users=\(.*\)|\1|p" "/etc/schroot/chroot.d/$full_name.conf" | grep -E "^([^,]*,)*$user_name,?.*$" > /dev/null; then
+			add_to_list="root-users"
+		fi
+		
+		# Add to list
+		sed -i "s|\(^$add_to_list=.*\)|\1,$user_name|" "/etc/schroot/chroot.d/$full_name.conf"
+		if [ $? -ne 0 ]; then
+			colorecho red "Failed to permit user '$user_name' to use work-chroot '$full_name'."
+                        colorecho red "Make sure command is run as root."
+			return 1
+		else
+			colorecho green "Successfully permitted user '$user_name' to use work-chroot '$full_name'."
+			return 0
+		fi
+	fi
+}
+
+prohibit_chroot()
+{	
+	full_name=$1
+	user_name=$2
+	# Check input
+	if [ "$full_name" == "" ] || [ "$user_name" == "" ]; then
+		print_usage
+		echo ""
+		colorecho red "base-chroot / promoted work-chroot name or username missing."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Make sure chroot exists
+	if ! in_array "$full_name" "$AVAIL_PROMOTED_WORKING" && ! in_array "$full_name" "$AVAIL_BASE"; then
+		colorecho red "chroot '$full_name' not a promoted work-chroot or a base-chroot."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Make sure user exists
+	if ! id "$user_name" > /dev/null 2>&1; then
+		colorecho red "user '$user_name' does not exist in system."
+		colorecho red "Not doing anything..."
+		return 1
+	fi
+	
+	# Input appears to be ok. Go ahead and remove them to the list
+	if in_array "$full_name" "$AVAIL_BASE"; then
+
+		# Remove the username from the config file.
+		if ! sed -i ":a;N;\$!ba;s|\(\[$full_name\].*\nusers=[^\n]*\),$user_name\([^\n]*\nroot-users=[^\n]*\),$user_name\([^\n]*\)|\1\2\3|" /etc/schroot/schroot.conf; then
+			colorecho red "Failed to prohibit user '$user_name' from base-chroot '$full_name'."
+			colorecho red "Make sure command is run as root."
+			return 1
+		else
+			colorecho green "Successfully prohibited user '$user_name' from promoted base-chroot '$full_name'."
+			return 0
+		fi
+	else
+		# Remove the username from the config file.
+		if ! sed -i "s|,*$user_name\(,*\)|\1|g" "/etc/schroot/chroot.d/$full_name.conf"; then
+			colorecho red "Failed to prohibit user '$user_name' from promoted base-chroot '$full_name'."
+			colorecho red "Make sure command is run as root."
+			return 1
+		else
+			colorecho green "Successfully prohibited user '$user_name' from promoted base-chroot '$full_name'."
+			return 0
+		fi
+	fi
+}
 
 
 
@@ -402,6 +544,14 @@ case $COMMAND in
 		;;
 	demote)
 		demote_chroot $2
+		exit $?
+		;;
+	permit)
+		permit_chroot $2 $3
+		exit $?
+		;;
+	prohibit)
+		prohibit_chroot $2 $3
 		exit $?
 		;;
 
