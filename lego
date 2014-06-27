@@ -82,12 +82,13 @@ print_usage ()
 	echo "        and allows for the history of that chroot to be visible at a glance."
 	echo "        Name collisions will result in an error."
 	echo ""
-	echo "    run (full-name) (script)"
+	echo "    run (full-name) (script) (args)"
 	echo "        Runs the base- or work-chroot with the specified full name."
 	echo "        If (full-name) is a base-chroot, a non-persistent snapshot will be created and you will be immediately"
 	echo "        chroot'd into that temporary environment *WHICH WILL BE DESTROYED WHEN YOU LOG OUT.*"
 	echo "        If (full-name) is a promoted work-chroot, it will still chroot to that work-chroot that will remain persistant."
 	echo "        If (script) arg is present, trying running this inside the chroot. Supports Linux scripts on path as well as /path/to/script"
+	echo "        If (script) arg is present, you may add subsequent command args to supplement the called script living in the chroot"
 	echo ""
 	echo "    end (full-name)"
 	echo "        Ends the work-chroot with specified full name."
@@ -223,6 +224,8 @@ run_chroot()
 {
 	chrootName=$1
 	scriptName=$2
+	declare -a argAry=("${!3}")
+	
 	# Check input
 	if [ "$chrootName" == "" ]; then
 		print_usage
@@ -248,7 +251,7 @@ run_chroot()
 		#schroot -c $chrootName
 		if [ "$scriptName" != ""  ]; then
 			colorecho green "Running script in chroot and exiting once completed."
-			schroot -c $chrootName $scriptName
+			schroot -c $chrootName -- $scriptName ${argAry[@]}
 		else
 			colorecho green "Opening interactive chroot."
 			schroot -c $chrootName
@@ -258,11 +261,10 @@ run_chroot()
 		return $exitval
 	fi
 	
-	# TODO: modify help command to mention this extra scriptName parameter that can be used.
 	# Must be good to switch to the persistent work-chroot
 	if [ "$scriptName" != ""  ]; then
 		colorecho green "Running script in chroot and exiting once completed."
-		schroot -c $chrootName -r $scriptName
+		schroot -c $chrootName -r -- $scriptName ${argAry[@]}
 	else
 		colorecho green "Opening interactive chroot."
 		schroot -c $chrootName -r
@@ -563,7 +565,11 @@ case $COMMAND in
 		;;
 	run)
 		# $3 is an optional arg, allowing for a command to be run upon running a chroot
-		run_chroot $2 $3
+		# _args[@] is an array that includes all command args to be supplied to the command run by $3
+		array=( $@ )
+		len=${#array[@]}
+		_args=${array[@]:3:$len}
+		run_chroot $2 $3 _args[@]
 		exit $?
 		;;
 	end)
