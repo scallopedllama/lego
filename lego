@@ -564,12 +564,17 @@ case $COMMAND in
 		exit $?
 		;;
 	run)
-		# $3 is an optional arg, allowing for a command to be run upon running a chroot
-		# _args[@] is an array that includes all command args to be supplied to the command run by $3
+		# _args[@] is an array containing all command args after "lego"
 		array=( $@ )
 		len=${#array[@]}
-		_args=${array[@]:3:$len}
-		run_chroot $2 $3 _args[@]
+		
+		# Store args related to script to run (if any script) in an array and execute the chroot
+ 		if [ "$len" -gt 3 ]; then
+			_args=${array[@]:3:$len}
+			run_chroot $2 $3 _args[@]
+		else
+			run_chroot $2 $3
+		fi
 		exit $?
 		;;
 	end)
