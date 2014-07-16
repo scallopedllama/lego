@@ -82,11 +82,13 @@ print_usage ()
 	echo "        and allows for the history of that chroot to be visible at a glance."
 	echo "        Name collisions will result in an error."
 	echo ""
-	echo "    run (full-name)"
+	echo "    run (full-name) (script) (args)"
 	echo "        Runs the base- or work-chroot with the specified full name."
 	echo "        If (full-name) is a base-chroot, a non-persistent snapshot will be created and you will be immediately"
 	echo "        chroot'd into that temporary environment *WHICH WILL BE DESTROYED WHEN YOU LOG OUT.*"
 	echo "        If (full-name) is a promoted work-chroot, it will still chroot to that work-chroot that will remain persistant."
+	echo "        If (script) arg is present, trying running this inside the chroot. Supports Linux scripts on path as well as /path/to/script"
+	echo "        If (script) arg is present, you may add subsequent command args to supplement the called script living in the chroot"
 	echo ""
 	echo "    end (full-name)"
 	echo "        Ends the work-chroot with specified full name."
@@ -220,17 +222,20 @@ new_chroot()
 
 run_chroot()
 {
-	output=$1
+	chrootName=$1
+	scriptName=$2
+	declare -a argAry=("${!3}")
+	
 	# Check input
-	if [ "$output" == "" ]; then
+	if [ "$chrootName" == "" ]; then
 		print_usage
 		echo ""
 		colorecho red "work-chroot name missing."
 		return 1
 	fi
 
-	if ! in_array $output "$ALL_AVAIL"; then
-		colorecho red "chroot '$output' not found."
+	if ! in_array $chrootName "$ALL_AVAIL"; then
+		colorecho red "chroot '$chrootName' not found."
 		colorecho red "Not doing anything..."
 		return 1
 	fi
@@ -239,17 +244,31 @@ run_chroot()
 	clear
 	
 	# Handle starting a new temporary work-chroot from a base-chroot. Add a long warning before the chroot to tell the user about the danger.
-	if in_array $output "$AVAIL_BASE"; then
-		colorecho red "WARNING: '$output' is a base-chroot. A temporary snapshot will be created and chroot'd to."
+	if in_array $chrootName "$AVAIL_BASE"; then
+		colorecho red "WARNING: '$chrootName' is a base-chroot. A temporary snapshot will be created and chroot'd to."
 		colorecho red "         THIS CHROOT ENVIRONMENT WILL BE DESTROYED AND LOST FOREVER WHEN YOU LOG OUT OF THE CHROOT."
-		colorecho red "         Use the new command to create a persistant work-chroot."
-		schroot -c $output
+		colorecho red "         Use the new command to create a persistent work-chroot."
+		#schroot -c $chrootName
+		if [ "$scriptName" != ""  ]; then
+			colorecho green "Running script in chroot and exiting once completed."
+			schroot -c $chrootName -- $scriptName ${argAry[@]}
+		else
+			colorecho green "Opening interactive chroot."
+			schroot -c $chrootName
+		fi
 		exitval=$?
-		colorecho yellow "NOTE: Temporary work-chroot environment permenantly deleted."
+		colorecho yellow "NOTE: Temporary work-chroot environment permanently deleted."
 		return $exitval
 	fi
+	
 	# Must be good to switch to the persistent work-chroot
-	schroot -c $output -r
+	if [ "$scriptName" != ""  ]; then
+		colorecho green "Running script in chroot and exiting once completed."
+		schroot -c $chrootName -r -- $scriptName ${argAry[@]}
+	else
+		colorecho green "Opening interactive chroot."
+		schroot -c $chrootName -r
+	fi
 }
 
 	
@@ -271,7 +290,7 @@ end_chroot()
 	fi
 	
 	# Confirm with user that they want to end the chroot. Print a message telling them what exactly this means.
-	colorecho yellow "WARNING: Ending a work-chroot will permenantly delete its environment."
+	colorecho yellow "WARNING: Ending a work-chroot will permanently delete its environment."
 	colorecho yellow "         What work has been done in this chroot will be lost forever."
 	
 	# See if the work-chroot is promoted
@@ -304,7 +323,7 @@ end_chroot()
 			
 	# Delete chroot
 	schroot -c $output -e
-	colorecho green "Permenantly deleted chroot environment for '$output' work-chroot."
+	colorecho green "Permanently deleted chroot environment for '$output' work-chroot."
 	return $?
 }
 
@@ -545,7 +564,17 @@ case $COMMAND in
 		exit $?
 		;;
 	run)
-		run_chroot $2
+		# _args[@] is an array containing all command args after "lego"
+		array=( $@ )
+		len=${#array[@]}
+		
+		# Store args related to script to run (if any script) in an array and execute the chroot
+ 		if [ "$len" -gt 3 ]; then
+			_args=${array[@]:3:$len}
+			run_chroot $2 $3 _args[@]
+		else
+			run_chroot $2 $3
+		fi
 		exit $?
 		;;
 	end)
