@@ -82,11 +82,12 @@ print_usage ()
 	echo "        and allows for the history of that chroot to be visible at a glance."
 	echo "        Name collisions will result in an error."
 	echo ""
-	echo "    run (full-name)"
+	echo "    run (full-name) [command ...]"
 	echo "        Runs the base- or work-chroot with the specified full name."
 	echo "        If (full-name) is a base-chroot, a non-persistent snapshot will be created and you will be immediately"
 	echo "        chroot'd into that temporary environment *WHICH WILL BE DESTROYED WHEN YOU LOG OUT.*"
-	echo "        If (full-name) is a promoted work-chroot, it will still chroot to that work-chroot that will remain persistant."
+	echo "        If (full-name) is a promoted work-chroot, it will still chroot to that work-chroot that will remain persistent."
+	echo "        If [command ...] arg is present, it will be run inside the specified chroot."
 	echo ""
 	echo "    end (full-name)"
 	echo "        Ends the work-chroot with specified full name."
@@ -221,6 +222,8 @@ new_chroot()
 run_chroot()
 {
 	chroot_name=$1
+	shift
+	
 	# Check input
 	if [ "$chroot_name" == "" ]; then
 		print_usage
@@ -249,7 +252,7 @@ run_chroot()
 		return $exitval
 	fi
 	# Must be good to switch to the persistent work-chroot
-	schroot -c $chroot_name -r
+	schroot -c $chroot_name -r $@
 }
 
 	
@@ -545,7 +548,8 @@ case $COMMAND in
 		exit $?
 		;;
 	run)
-		run_chroot $2
+		shift
+		run_chroot $@
 		exit $?
 		;;
 	end)
