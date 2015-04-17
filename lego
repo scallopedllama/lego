@@ -220,17 +220,17 @@ new_chroot()
 
 run_chroot()
 {
-	output=$1
+	chroot_name=$1
 	# Check input
-	if [ "$output" == "" ]; then
+	if [ "$chroot_name" == "" ]; then
 		print_usage
 		echo ""
 		colorecho red "work-chroot name missing."
 		return 1
 	fi
 
-	if ! in_array $output "$ALL_AVAIL"; then
-		colorecho red "chroot '$output' not found."
+	if ! in_array $chroot_name "$ALL_AVAIL"; then
+		colorecho red "chroot '$chroot_name' not found."
 		colorecho red "Not doing anything..."
 		return 1
 	fi
@@ -239,17 +239,17 @@ run_chroot()
 	clear
 	
 	# Handle starting a new temporary work-chroot from a base-chroot. Add a long warning before the chroot to tell the user about the danger.
-	if in_array $output "$AVAIL_BASE"; then
-		colorecho red "WARNING: '$output' is a base-chroot. A temporary snapshot will be created and chroot'd to."
+	if in_array $chroot_name "$AVAIL_BASE"; then
+		colorecho red "WARNING: '$chroot_name' is a base-chroot. A temporary snapshot will be created and chroot'd to."
 		colorecho red "         THIS CHROOT ENVIRONMENT WILL BE DESTROYED AND LOST FOREVER WHEN YOU LOG OUT OF THE CHROOT."
-		colorecho red "         Use the new command to create a persistant work-chroot."
-		schroot -c $output
+		colorecho red "         Use the new command to create a persistent work-chroot."
+		schroot -c $chroot_name
 		exitval=$?
-		colorecho yellow "NOTE: Temporary work-chroot environment permenantly deleted."
+		colorecho yellow "NOTE: Temporary work-chroot environment permanently deleted."
 		return $exitval
 	fi
 	# Must be good to switch to the persistent work-chroot
-	schroot -c $output -r
+	schroot -c $chroot_name -r
 }
 
 	
@@ -271,7 +271,7 @@ end_chroot()
 	fi
 	
 	# Confirm with user that they want to end the chroot. Print a message telling them what exactly this means.
-	colorecho yellow "WARNING: Ending a work-chroot will permenantly delete its environment."
+	colorecho yellow "WARNING: Ending a work-chroot will permanently delete its environment."
 	colorecho yellow "         What work has been done in this chroot will be lost forever."
 	
 	# See if the work-chroot is promoted
