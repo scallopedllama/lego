@@ -252,7 +252,7 @@ run_chroot()
 		return $exitval
 	fi
 	# Must be good to switch to the persistent work-chroot
-	schroot -c $chroot_name -r $@
+	schroot -c $chroot_name -r -- $@
 }
 
 	
