@@ -246,7 +246,7 @@ run_chroot()
 		colorecho red "WARNING: '$chroot_name' is a base-chroot. A temporary snapshot will be created and chroot'd to."
 		colorecho red "         THIS CHROOT ENVIRONMENT WILL BE DESTROYED AND LOST FOREVER WHEN YOU LOG OUT OF THE CHROOT."
 		colorecho red "         Use the new command to create a persistent work-chroot."
-		schroot -c $chroot_name
+		schroot -c $chroot_name -- $@
 		exitval=$?
 		colorecho yellow "NOTE: Temporary work-chroot environment permanently deleted."
 		return $exitval
