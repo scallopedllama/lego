@@ -84,6 +84,13 @@ case $COMMAND in
 		BASE="$(docker ps -a --format '{{.Image}}' --filter name="${NAME}")"
 		docker rmi "${BASE}:${NAME}"
 		;;
+	*)
+		Usage
+		;;
+	'')
+		Usage
+		;;
 esac
+
 
 
