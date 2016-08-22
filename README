@@ -1,65 +1,33 @@
-lego -- build system management with schroot
-Joe Balough 2012
+# `lego` -- build system management with docker
 
-lego is a utility for managing btrfs-snapshot chroots using the schroot tool.
-To use lego, create a new Logical Volume, format it btrfs, and mount it under /builds.
-Under /builds, create two subdirectories, /builds/bases and /builds/chroots.
-Create a new btrfs subvolume under /builds/bases and set up that directory as a build chroot:
-  Use debbootstrap to install a base operating system
-  Copy some default .basrhrc, etc. files to etc/skel in the base-chroot
-  Copy the sources list from the main system into the base-chroot for more repositories
-  Chroot into the base-chroot and install at least the following software:
-	build-essential subversion git vim diffstat texi2html texinfo cvs gawk chrpath wget screen \
-	python python-apport python-apt python-apt-common python-argparse python-central python-crypto \
-	python-gnupginterface python-httplib2 python-keyring python-launchpadlib python-lazr.restfulclient \
-	python-lazr.uri python-minimal python-oauth python-pkg-resources python-ply python-problem-report \
-	python-progressbar python-simplejson python-software-properties python-support python-wadllib \
-	python-wsgi-intercept python-zope.interface sqlite3 autoconf libtool
-  Change the /bin/sh symlink so that it points to /bin/bash
-  Set up openembedded under /opt
-Add the base-chroot to the schroot configuration file at /etc/schroot/schroot.conf
-	[beableboard]
-	type=btrfs-snapshot
-	description=BeagleBoard System Build
-	users=builder
-	root-users=builder
-	source-root-users=root
-	btrfs-source-subvolume=/builds/bases/bb-base
-	btrfs-snapshot-directory=/builds/chroots
-Comment out home mount in /etc/schroot/default/fstab, otherwise the base server home directory is mounted there.
-Add tmpfs mount point for /dev/shm (Required for python multithreading support):
-  /etc/schroot/default/fstab add to end of list:
-  tmpfs           /dev/shm        tmpfs   defaults,noexec,nosuid  0       0
-  and remove /builds/bases/bb-base/dev/shm
-  then # mkdir /builds/bases/bb-base/dev/shm
-Create a script to ensure the user has a home directory inside the new chroot
-  /etc/schroot/setup.d/60home
-	set -e
+## Joe Balough 2016
 
-	. "$SETUP_DATA_DIR/common-data"
-	. "$SETUP_DATA_DIR/common-functions"
-	. "$SETUP_DATA_DIR/common-config"
+lego is a utility for managing docker container chroots using the docker tool.
+To use lego, it is best used in conjunction with a separate volume, formatted ext4,
+and mounted to /var/lib/docker so that docker containers and their storage go there.
+Follow the instructions for your distribution to change the docker launch options to
+use the `overlay` or better `overlay2` storage backend. If you have to use `overlay`
+make sure that your ext4 volume has a higher density of inodes to avoid running out.
 
-	# Plain chroots should not be able to use scripts, but check anyway to
-	# be safe.
-	if [ $CHROOT_TYPE = "plain" ]; then
-		fatal "plain chroots may not run setup scripts; use directory instead"
-	fi
+With docker configured, start the service and make sure it all works ok.
 
-	# Set up home directory for user if it does not already exist
-	if [ ! -d "$CHROOT_MOUNT_LOCATION/$AUTH_HOME" ]; then
-		HOMEDIR=$(/usr/bin/dirname "$CHROOT_MOUNT_LOCATION/$AUTH_HOME")
-		if [ ! -d "$HOMEDIR" ]; then
-			mkdir -p "$HOMEDIR"
-		fi
-		cp -rf "$CHROOT_MOUNT_LOCATION/etc/skel" "$HOMEDIR/$AUTH_USER"
-		chown -R $AUTH_USER:$AUTH_USER "$HOMEDIR/$AUTH_USER"
-		chown -R $AUTH_USER:$AUTH_USER "$CHROOT_MOUNT_LOCATION/opt/oebuild/sources"
-	fi
+Create a `Dockerfile` for your build environment. Base it off of the distribution you
+are used to and install the packages your build tool needs inside. 
+The `Dockerfile` should add a common user that all users can use (like `builder`)
+so that when you promote a chroot and other people use it, they can still build as
+expected.
 
-Base system should now be set up.
-Run lego --help for usage information.
+Build your `Dockerfile` and tag it to make your first base-chroot.
 
-Also included in this repository is a lego_completion script that will provide
-bash completion for lego. Copy this script into /etc/bash_completion.d to enable it.
+From there, you can use lego just like it did with version 1.
+The main difference is that chroot management is a bit better with docker.
+
+### Integration with Jenkins
+
+To use a Docker container to perform builds, make your build environment specify
+SSHD to be the default RUN command. It should be possible to run one as a daemon
+(with Docker) and ssh to the forwarded SSH port (as indicated in `docker ps`).
+With this container, you can add it as an image in the Jenkins Docker plugin, then
+limit builds to that container using the label.
+
 
