@@ -1,5 +1,44 @@
 #!/bin/bash
 
+# The config file lets you specify what command to run in the container
+# Allow the conf file to not exist by making sure that the LEGO_RUN_COMMAND variable has a default value.
+LEGO_RUN_COMMAND="/bin/bash"
+
+# Load up lego config file
+source /etc/lego.conf
+
+# Prepare volume arguments to pass to docker run
+LEGO_VOLUMES_ARG=""
+for volume in ${LEGO_VOLUMES}; do
+	LEGO_VOLUMES_ARG="${LEGO_VOLUMES_ARG} -v ${volume}"
+done
+
+# Convert the LEGO_CONTAINER_NAME_IGNORE value to a string that can be
+# passed to grep -vE to ignore those containers.
+first="y"
+for i in ${LEGO_CONTAINER_NAME_IGNORE}; do
+	if [ "${first}" == "y" ]; then
+		LEGO_CONTAINER_NAME_IGNORE_GREP="(${i}"
+		first=""
+	else
+		LEGO_CONTAINER_NAME_IGNORE_GREP="${LEGO_CONTAINER_NAME_IGNORE_GREP}|${i}"
+	fi
+done
+LEGO_CONTAINER_NAME_IGNORE_GREP="${LEGO_CONTAINER_NAME_IGNORE_GREP})"
+
+# Convert the LEGO_IMAGE_NAME_IGNORE value to a string that can be
+# passed to grep -vE to ignore those images.
+first="y"
+for i in ${LEGO_IMAGE_NAME_IGNORE}; do
+	if [ "${first}" == "y" ]; then
+		LEGO_IMAGE_NAME_IGNORE_GREP="(${i}"
+		first=""
+	else
+		LEGO_IMAGE_NAME_IGNORE_GREP="${LEGO_IMAGE_NAME_IGNORE_GREP}|${i}"
+	fi
+done
+LEGO_IMAGE_NAME_IGNORE_GREP="${LEGO_IMAGE_NAME_IGNORE_GREP})"
+
 Usage() {
 	echo "Usage: $0 (command) [arg] ..."
 	echo ""
@@ -21,28 +60,15 @@ Usage() {
 }
 
 RunningChroots() {
-	docker ps --format '{{.Names}}' | grep -vE '(registry|jenkins)'
+	docker ps --format '{{.Names}}' | grep -vE "${LEGO_CONTAINER_NAME_IGNORE_GREP}"
 }
 WorkChroots() {
-	docker ps -a --format '{{.Names}}' | grep -vE '(registry|jenkins)'
+	docker ps -a --format '{{.Names}}' | grep -vE "${LEGO_CONTAINER_NAME_IGNORE_GREP}"
 }
 BaseChroots() {
 	# Print all images in the format {image name}:{version}, remove jenkins, registry, and ubuntu images, and remove :latest text
-	docker images --format '{{.Repository}}:{{.Tag}}' | grep -vE '(jenkins|registry|ubuntu)' | sed 's|:latest||'
+	docker images --format '{{.Repository}}:{{.Tag}}' | grep -vE "${LEGO_IMAGE_NAME_IGNORE_GREP}" | sed 's|:latest||'
 }
-
-# The config file lets you specify what command to run in the container
-# Allow the conf file to not exist by making sure that the LEGO_RUN_COMMAND variable has a default value.
-LEGO_RUN_COMMAND="/bin/bash"
-
-# Load up lego config file
-source /etc/lego.conf
-
-# Prepare volume arguments to pass to docker run
-LEGO_VOLUMES_ARG=""
-for volume in ${LEGO_VOLUMES}; do
-	LEGO_VOLUMES_ARG="${LEGO_VOLUMES_ARG} -v ${volume}"
-done
 
 COMMAND=$1
 case $COMMAND in

@@ -34,6 +34,13 @@ configure some behavior.
 * `LEGO_RUN_CMD`
 ** Command that should be run to launch container, defaults to `/bin/bash`
 
+* `LEGO_CONTAINER_NAME_IGNORE`
+** Containers name patterns that should be ignored when doing `lego list` for the work chroots list
+** This is useful when running other services on the server using docker like `jenkins` or `gitlab`
+
+* `LEGO_IMAGE_NAME_IGNORE`
+** Image name patterns that should be ignored when doing `lego list` for the base chroots list
+** This is useful for hiding certain images that you don't want to use for lego like upstream images for services like `jenkins` or `gitlab`
 
 ### Integration with Jenkins
 
