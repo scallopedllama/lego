@@ -73,11 +73,11 @@ BaseChroots() {
 COMMAND=$1
 case $COMMAND in
 	list)
-		echo "Definted base-chroots:"
-		BaseChroots
+		echo "Definted base-chroots (from docker images):"
+		BaseChroots | sed 's|^|    |'
 		echo ""
-		echo "Defined work-chroots:"
-		WorkChroots
+		echo "Defined work-chroots (from docker ps -a):"
+		WorkChroots | sed 's|^|    |'
 		exit 0
 		;;
 	new)
