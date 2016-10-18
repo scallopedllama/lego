@@ -14,6 +14,9 @@ Usage() {
 	echo "                                       Any arguments after the name will be passed as arguments to docker run"
 	echo "    promote (name)                   - Promote the specified chroot so that new work-chroots can be made based off of it."
 	echo "    demote  (name)                   - Demote the specified chroot so that new work-chroots can no longer be made based off of it."
+	echo ""
+	echo "Additional arguments to always pass to docker run can be configured in /etc/lego.conf."
+	echo "This is useful for volumes and the like. See README for more information."
 	exit 1
 }
 
@@ -24,6 +27,19 @@ BaseChroots() {
 	# Print all images in the format {image name}:{version}, remove jenkins, registry, and ubuntu images, and remove :latest text
 	docker images --format '{{.Repository}}:{{.Tag}}' | grep -vE '(jenkins|registry|ubuntu)' | sed 's|:latest||'
 }
+
+# The config file lets you specify what command to run in the container
+# Allow the conf file to not exist by making sure that the LEGO_RUN_COMMAND variable has a default value.
+LEGO_RUN_COMMAND="/bin/bash"
+
+# Load up lego config file
+source /etc/lego.conf
+
+# Prepare volume arguments to pass to docker run
+LEGO_VOLUMES_ARG=""
+for volume in ${LEGO_VOLUMES}; do
+	LEGO_VOLUMES_ARG="${LEGO_VOLUMES_ARG} -v ${volume}"
+done
 
 COMMAND=$1
 case $COMMAND in
@@ -47,7 +63,7 @@ case $COMMAND in
 		echo "Creating container with the name ${USER}-${NAME} and running it."
 		echo "This container will still be around when you exit so please remember to end it."
 		echo ""
-		docker run -it --name "${USER}-${NAME}" --user builder $@ "${BASE}" /bin/bash
+		docker run -it --name "${USER}-${NAME}" --user builder ${LEGO_VOLUMES_ARG} $@ "${BASE}" "${LEGO_RUN_COMMAND}"
 		exit 0
 		;;
 	end)
@@ -72,7 +88,7 @@ case $COMMAND in
 		elif BaseChroots | grep -q "^${NAME}\$"; then
 			echo "Starting transient chroot of base ${NAME}."
 			echo "WARNING: This chroot will be automatically cleaned up when you exit."
-			docker run --rm -it --name "${USER}-TRANSIENT" --user builder $@ "${NAME}" /bin/bash
+			docker run --rm -it --name "${USER}-TRANSIENT" --user builder ${LEGO_VOLUMES_ARG} $@ "${NAME}" "${LEGO_RUN_COMMAND}"
 		fi
 		exit 0
 		;;

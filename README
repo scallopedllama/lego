@@ -22,6 +22,19 @@ Build your `Dockerfile` and tag it to make your first base-chroot.
 From there, you can use lego just like it did with version 1.
 The main difference is that chroot management is a bit better with docker.
 
+### Config File
+
+There is now a `lego` config file that lives at `/etc/lego.conf` in which you can
+configure some behavior.
+
+* `LEGO_VOLUMES`
+** Configure volumes that should always be mapped inside of containers created by lego
+** Useful for mapping your `OE_PREMIRRORS` volume
+
+* `LEGO_RUN_CMD`
+** Command that should be run to launch container, defaults to `/bin/bash`
+
+
 ### Integration with Jenkins
 
 To use a Docker container to perform builds, make your build environment specify
