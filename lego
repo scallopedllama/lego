@@ -20,6 +20,9 @@ Usage() {
 	exit 1
 }
 
+RunningChroots() {
+	docker ps --format '{{.Names}}' | grep -vE '(registry|jenkins)'
+}
 WorkChroots() {
 	docker ps -a --format '{{.Names}}' | grep -vE '(registry|jenkins)'
 }
@@ -82,7 +85,10 @@ case $COMMAND in
 		shift
 		if [ "${NAME}" = "" ]; then Usage; fi
 		
-		if WorkChroots | grep -q "^${NAME}\$"; then
+		if RunningChroots | grep -q "^${NAME}\$"; then
+			echo "Running another shell inside running chroot ${NAME}"
+			docker exec -it "${NAME}" "${LEGO_RUN_COMMAND}"
+		elif WorkChroots | grep -q "^${NAME}\$"; then
 			echo "Running persistent chroot ${NAME}"
 			docker start -i "${NAME}"
 		elif BaseChroots | grep -q "^${NAME}\$"; then
