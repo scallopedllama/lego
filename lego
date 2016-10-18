@@ -92,6 +92,7 @@ case $COMMAND in
 		echo "Creating container with the name ${USER}-${NAME} and running it."
 		echo "This container will still be around when you exit so please remember to end it."
 		echo ""
+		echo docker run -it --name \"${USER}-${NAME}\" --user builder ${LEGO_VOLUMES_ARG} $@ \"${BASE}\" \"${LEGO_RUN_COMMAND}\"
 		docker run -it --name "${USER}-${NAME}" --user builder ${LEGO_VOLUMES_ARG} $@ "${BASE}" "${LEGO_RUN_COMMAND}"
 		exit 0
 		;;
@@ -99,7 +100,8 @@ case $COMMAND in
 		NAME=$2
 
 		if [ "${NAME}" = "" ]; then Usage; fi
-
+		
+		echo docker rm \"${NAME}\"
 		if docker rm "${NAME}"; then
 			echo "Removed container with the name ${NAME}"
 		fi
@@ -113,13 +115,16 @@ case $COMMAND in
 		
 		if RunningChroots | grep -q "^${NAME}\$"; then
 			echo "Running another shell inside running chroot ${NAME}"
+			echo docker exec -it \"${NAME}\" \"${LEGO_RUN_COMMAND}\"
 			docker exec -it "${NAME}" "${LEGO_RUN_COMMAND}"
 		elif WorkChroots | grep -q "^${NAME}\$"; then
 			echo "Running persistent chroot ${NAME}"
+			echo docker start -i \"${NAME}\"
 			docker start -i "${NAME}"
 		elif BaseChroots | grep -q "^${NAME}\$"; then
 			echo "Starting transient chroot of base ${NAME}."
 			echo "WARNING: This chroot will be automatically cleaned up when you exit."
+			echo docker run --rm -it --name \"${USER}-TRANSIENT\" --user builder ${LEGO_VOLUMES_ARG} $@ \"${NAME}\" \"${LEGO_RUN_COMMAND}\"
 			docker run --rm -it --name "${USER}-TRANSIENT" --user builder ${LEGO_VOLUMES_ARG} $@ "${NAME}" "${LEGO_RUN_COMMAND}"
 		fi
 		exit 0
@@ -130,6 +135,7 @@ case $COMMAND in
 		if [ "${NAME}" = "" ]; then Usage; fi
 		
 		BASE="$(docker ps -a --format '{{.Image}}' --filter name="${NAME}")"
+		echo docker commit ${NAME} \"${BASE}:${NAME}\"
 		docker commit ${NAME} "${BASE}:${NAME}"
 		;;
 	demote)
@@ -137,6 +143,7 @@ case $COMMAND in
 		if [ "${NAME}" = "" ]; then Usage; fi
 		
 		BASE="$(docker ps -a --format '{{.Image}}' --filter name="${NAME}")"
+		echo docker rmi \"${BASE}:${NAME}\"
 		docker rmi "${BASE}:${NAME}"
 		;;
 	*)
